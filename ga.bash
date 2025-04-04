@@ -4,29 +4,41 @@
 
 # Ensure ANTHROPIC_API_KEY is set
 if [[ -z "$ANTHROPIC_API_KEY" ]]; then
-  echo -e "\033[1;31mError: ANTHROPIC_API_KEY environment variable not set.\033[0m" >&2
+  echo "Error: ANTHROPIC_API_KEY environment variable not set." >&2
   exit 1
 fi
 
 # Ensure jq is installed
 if ! command -v jq >/dev/null 2>&1; then
-  echo -e "\033[1;31mError: jq is required but not installed. Please install jq.\033[0m" >&2
+  echo "Error: jq is required but not installed. Please install jq." >&2
   exit 1
 fi
 
 # Get the staged git diff
 diff=$(git diff --staged)
 if [[ -z "$diff" ]]; then
-  echo -e "\033[1;33mNo staged changes to commit.\033[0m"
+  echo "No staged changes to commit."
   exit 0
 fi
 
-# Compute a continuous line for formatting based on terminal width
-cols=$(tput cols 2>/dev/null)
-if [[ -z "$cols" ]]; then
-  cols=80
-fi
-line=$(printf '%*s' "$cols" | tr ' ' '─')
+# Function to generate a divider line with a label in the middle
+divider() {
+  local label="$1"
+  local cols
+  cols=$(tput cols 2>/dev/null)
+  if [[ -z "$cols" ]]; then
+    cols=80
+  fi
+  local label_with_spaces=" $label "
+  local label_length=${#label_with_spaces}
+  local dash_count_left=$(( (cols - label_length) / 2 ))
+  local dash_count_right=$(( cols - label_length - dash_count_left ))
+  local left
+  left=$(printf "%0.s─" $(seq 1 $dash_count_left))
+  local right
+  right=$(printf "%0.s─" $(seq 1 $dash_count_right))
+  echo "${left}${label_with_spaces}${right}"
+}
 
 # Function to generate commit message using the Anthropic API (Claude)
 generate_commit_message() {
@@ -45,7 +57,7 @@ generate_commit_message() {
   commit_message=$(echo "$response" | jq -r '.content | map(.text) | join("\n")')
 
   if [[ -z "$commit_message" || "$commit_message" == "null" ]]; then
-    echo -e "\033[1;31mFailed to generate commit message.\033[0m" >&2
+    echo "Failed to generate commit message." >&2
     exit 1
   fi
 
@@ -58,12 +70,13 @@ commit_message=$(generate_commit_message)
 # Confirmation loop
 while true; do
   echo ""
-  echo -e "\033[1;34mGenerated commit message:\033[0m"
-  echo -e "\033[1;34m$line\033[0m"
+  divider "Generated Commit Message"
+  echo ""
   # Indent each line of the commit message by 4 spaces
   indented_commit=$(echo "$commit_message" | sed 's/^/    /')
-  echo -e "\033[1;32m$indented_commit\033[0m"
-  echo -e "\033[1;34m$line\033[0m"
+  echo "$indented_commit"
+  echo ""
+  divider "Commit Message End"
   echo ""
   read -p "Do you want to use this commit message? (y)es [default], (r)egenerate, or (n)o cancel: " choice
   # Default to "y" if the user presses Enter
@@ -77,11 +90,11 @@ while true; do
       commit_message=$(generate_commit_message)
       ;;
     n|N )
-      echo -e "\033[1;33mCommit canceled.\033[0m"
+      echo "Commit canceled."
       exit 0
       ;;
     * )
-      echo -e "\033[1;33mPlease enter y, r, or n.\033[0m"
+      echo "Please enter y, r, or n."
       ;;
   esac
 done
