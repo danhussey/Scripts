@@ -1,5 +1,5 @@
 #!/bin/bash
-# ga - Generate a Conventional Commits style commit message using the Anthropic API,
+# gq - Generate a Conventional Commits style commit message using the Anthropic API,
 # confirm, and commit staged changes only
 
 # Ensure ANTHROPIC_API_KEY is set
