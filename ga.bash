@@ -1,9 +1,10 @@
 #!/bin/bash
-# ga - Generate a Conventional Commits style commit message using the Claude API, confirm, and commit changes
+# ga - Generate a Conventional Commits style commit message using the Anthropic API,
+# confirm, and commit changes
 
-# Ensure CLAUDE_API_KEY is set
-if [[ -z "$CLAUDE_API_KEY" ]]; then
-  echo "Error: CLAUDE_API_KEY environment variable not set." >&2
+# Ensure ANTHROPIC_API_KEY is set
+if [[ -z "$ANTHROPIC_API_KEY" ]]; then
+  echo "Error: ANTHROPIC_API_KEY environment variable not set." >&2
   exit 1
 fi
 
@@ -20,34 +21,49 @@ if [[ -z "$diff" ]]; then
   exit 0
 fi
 
-# Function to generate commit message using Claude API
+# Function to generate commit message using the Anthropic API (Claude)
 generate_commit_message() {
-  read -r -d '' prompt <<EOF
-Based on the following git diff, generate a commit message in the Conventional Commits style:
+  response=$(curl -s -X POST "https://api.anthropic.com/v1/messages" \
+    --header "x-api-key: $ANTHROPIC_API_KEY" \
+    --header "anthropic-version: 2023-06-01" \
+    --header "content-type: application/json" \
+    --data "$(jq -n --arg diff "$diff" '{
+      model: "claude-3-7-sonnet-latest",
+      max_tokens: 1200,
+      messages: [
+        {role: "user", content: ("Analyze the following git diff and generate a commit message using the Conventional Commits style. Respond with ONLY the git commit message and no other text. Use dot points for conciseness in the body. Follow these guidelines:
 
-$diff
+1. **Header**:
+   - Begin with a commit type. Common types include:
+     - **feat**: Introduces a new feature
+     - **fix**: Patches a bug
+     - **docs**: Documentation changes
+     - **style**: Code formatting, white-space, etc.
+     - **refactor**: Code changes that neither fix a bug nor add a feature
+     - **perf**: Performance improvements
+     - **test**: Adding or updating tests
+     - **chore**: Maintenance tasks
+   - Optionally include a scope in parentheses (e.g., `feat(parser):`).
+   - Follow with a concise, imperative description of the change.
 
-Commit message:
-EOF
+2. **Body (Optional)**:
+   - Provide additional context, motivation, or details about the change if necessary.
+   - Explain what was changed and why.
 
-  response=$(curl -s -X POST "https://api.anthropic.com/v1/complete" \
-    -H "Content-Type: application/json" \
-    -H "x-api-key: $CLAUDE_API_KEY" \
-    -d "$(jq -n --arg prompt "$prompt" '{
-      model: "claude-3-5-haiku-latest",
-      prompt: $prompt,
-      max_tokens: 100,
-      temperature: 0.7,
-      stop_sequences: ["\n\n"]
-  }')")
-  
-  commit_message=$(echo "$response" | jq -r '.completion')
-  
+3. **Footer (Optional)**:
+   - Include notes on breaking changes (e.g., start with `BREAKING CHANGE:`) or reference issues (e.g., `Closes #123`).
+
+Git diff:\n\n" + $diff )}
+      ]
+    }')")
+
+  commit_message=$(echo "$response" | jq -r '.content | map(.text) | join("\n")')
+
   if [[ -z "$commit_message" || "$commit_message" == "null" ]]; then
     echo "Failed to generate commit message." >&2
     exit 1
   fi
-  
+
   echo "$commit_message"
 }
 
